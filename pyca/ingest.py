@@ -141,19 +141,23 @@ def control_loop():
     notify.notify('STATUS=Running')
     while not terminate():
         notify.notify('WATCHDOG=1')
-        # Get next recording
-        session = get_session()
-        event = session.query(RecordedEvent)\
-                       .filter(RecordedEvent.status ==
-                               Status.FINISHED_RECORDING).first()
-        if event:
-            # nosec: we do not need a secure random number here
-            delay = random.randint(config('ingest', 'delay_min'),  # nosec
-                                   config('ingest', 'delay_max'))
-            logger.info("Delaying ingest for %s seconds", delay)
-            time.sleep(delay)
-            safe_start_ingest(event)
-        session.close()
+        # Try to ingest finished events if configured to automatic ingest on
+        # recorded and delay_max >= delay_min
+        if config('ingest', 'delay_min') >= 0 and \
+                config('ingest', 'delay_max') >= config('ingest', 'delay_min'):
+            # Get next recording
+            session = get_session()
+            event = session.query(RecordedEvent)\
+                .filter(RecordedEvent.status ==
+                        Status.FINISHED_RECORDING).first()
+            if event:
+                # nosec: we do not need a secure random number here
+                delay = random.randint(config('ingest', 'delay_min'),  # nosec
+                                       config('ingest', 'delay_max'))
+                logger.info("Delaying ingest for %s seconds", delay)
+                time.sleep(delay)
+                safe_start_ingest(event)
+            session.close()
         time.sleep(1.0)
     logger.info('Shutting down ingest service')
     set_service_status(Service.INGEST, ServiceStatus.STOPPED)
